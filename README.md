@@ -37,6 +37,11 @@ The page explains the pipeline itself: click a stage and htmx fetches its descri
 
 Run it: `go run .` then open http://localhost:8080 (set `PORT` to change the port).
 
+or if you already use port 8080 
+
+PORT=8090 go run . 
+
+
 ## 3. The pipeline
 
 `pipeline.yml` is the only workflow with triggers. It calls the others as reusable workflows, so the
