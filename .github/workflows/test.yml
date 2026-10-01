@@ -23,7 +23,7 @@ jobs:
             echo "## 🧪 Tests"
             if [ -f test.json ]; then python3 scripts/summarize_tests.py test.json coverage.out; else echo "No test report was produced."; fi
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.out
