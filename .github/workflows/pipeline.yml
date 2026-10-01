@@ -1,0 +1,99 @@
+# Orchestrator: owns the triggers and the job order. Each stage lives in its own reusable workflow.
+name: pipeline
+run-name: pipeline (${{ github.event_name }} on ${{ github.ref_name }})
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'   # Mondays 03:00 UTC: rescan for newly published CVEs
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  test:
+    uses: ./.github/workflows/test.yml
+
+  sonarqube:
+    needs: test
+    # Fork PRs cannot read secrets, so SonarQube is skipped for them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/sonarqube.yml
+    secrets: inherit
+
+  build:
+    needs: [lint, test]
+    uses: ./.github/workflows/build.yml
+
+  trivy:
+    needs: build
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/trivy.yml
+
+  publish:
+    needs: [trivy, sonarqube]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/publish.yml
+
+  rhacs:
+    needs: publish
+    uses: ./.github/workflows/rhacs.yml
+    with:
+      image_ref: ${{ needs.publish.outputs.image_ref }}
+    secrets: inherit
+
+  deploy:
+    needs: [publish, rhacs]
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      image_ref: ${{ needs.publish.outputs.image_ref }}
+      runner_labels: ${{ vars.DEPLOY_RUNNER_LABELS || '["self-hosted","linux","x64","k8s"]' }}
+
+  falco:
+    needs: deploy
+    uses: ./.github/workflows/falco.yml
+    with:
+      runner_labels: ${{ vars.DEPLOY_RUNNER_LABELS || '["self-hosted","linux","x64","k8s"]' }}
+
+  summary:
+    if: always()
+    needs: [lint, test, sonarqube, build, trivy, publish, rhacs, deploy, falco]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pipeline overview
+        run: |
+          {
+            echo "## 🚦 Pipeline overview"
+            echo "Triggered by **${{ github.event_name }}** on \`${{ github.ref_name }}\` (commit \`${GITHUB_SHA::7}\`)."
+            echo
+            echo "| Stage | Result |"
+            echo "|---|---|"
+            bash scripts/step-row.sh "Lint" "${{ needs.lint.result }}"
+            bash scripts/step-row.sh "Test" "${{ needs.test.result }}"
+            bash scripts/step-row.sh "SonarQube" "${{ needs.sonarqube.result }}"
+            bash scripts/step-row.sh "Build" "${{ needs.build.result }}"
+            bash scripts/step-row.sh "Trivy" "${{ needs.trivy.result }}"
+            bash scripts/step-row.sh "Publish" "${{ needs.publish.result }}"
+            bash scripts/step-row.sh "RHACS" "${{ needs.rhacs.result }}"
+            bash scripts/step-row.sh "Deploy" "${{ needs.deploy.result }}"
+            bash scripts/step-row.sh "Falco" "${{ needs.falco.result }}"
+          } >> "$GITHUB_STEP_SUMMARY"

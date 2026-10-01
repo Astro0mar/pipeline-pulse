@@ -1,0 +1,66 @@
+name: rhacs
+on:
+  workflow_call:
+    inputs:
+      image_ref:
+        type: string
+        required: true
+    secrets:
+      ROX_API_TOKEN:
+        required: true
+      ROX_CENTRAL_ADDRESS:
+        required: true
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  rhacs:
+    name: Red Hat ACS policy checks (roxctl)
+    runs-on: ubuntu-latest
+    env:
+      ROX_API_TOKEN: ${{ secrets.ROX_API_TOKEN }}
+      ROX_CENTRAL_ADDRESS: ${{ secrets.ROX_CENTRAL_ADDRESS }}   # host:port, e.g. central.example.com:443
+      IMAGE_REF: ${{ inputs.image_ref }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install roxctl from Central
+        run: |
+          curl -sSfL -H "Authorization: Bearer $ROX_API_TOKEN" \
+            "https://${ROX_CENTRAL_ADDRESS}/api/cli/download/roxctl-linux" -o roxctl
+          chmod +x roxctl
+          sudo mv roxctl /usr/local/bin/roxctl
+      - id: scan
+        name: Image scan
+        run: roxctl image scan --image "$IMAGE_REF" --endpoint "$ROX_CENTRAL_ADDRESS" --output table | tee scan.txt
+      - id: check
+        name: Image policy check (gate)
+        run: roxctl image check --image "$IMAGE_REF" --endpoint "$ROX_CENTRAL_ADDRESS" | tee check.txt
+      - id: deploycheck
+        name: Deployment policy check (gate)
+        run: |
+          sed "s|IMAGE_PLACEHOLDER|$IMAGE_REF|" k8s/deployment.yaml > /tmp/deploy.yaml
+          roxctl deployment check --file /tmp/deploy.yaml --endpoint "$ROX_CENTRAL_ADDRESS" | tee deploy-check.txt
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 🎩 Red Hat ACS"
+            echo "| Check | Result |"
+            echo "|---|---|"
+            bash scripts/step-row.sh "Image scan" "${{ steps.scan.outcome }}"
+            bash scripts/step-row.sh "Image policies" "${{ steps.check.outcome }}"
+            bash scripts/step-row.sh "Deployment policies" "${{ steps.deploycheck.outcome }}"
+            for f in scan.txt check.txt deploy-check.txt; do
+              [ -f "$f" ] || continue
+              echo
+              echo "<details><summary>$f</summary>"
+              echo
+              echo '```'
+              head -c 6000 "$f"
+              echo
+              echo '```'
+              echo "</details>"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

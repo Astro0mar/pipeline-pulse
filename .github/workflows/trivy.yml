@@ -1,0 +1,68 @@
+name: trivy
+on: workflow_call
+permissions:
+  contents: read
+  security-events: write
+defaults:
+  run:
+    shell: bash
+jobs:
+  trivy:
+    name: Trivy (source, secrets, config, image)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: image
+          path: /tmp
+      - name: Scan source, secrets and IaC
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: json
+          output: trivy-fs.json
+      - name: Scan image
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          input: /tmp/image.tar
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: json
+          output: trivy-image.json
+      - name: Image report for the Security tab
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          input: /tmp/image.tar
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-image.sarif
+          limit-severities-for-sarif: true
+      - name: Upload SARIF
+        continue-on-error: true   # code scanning needs GitHub Advanced Security on private repos
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 🛡️ Trivy"
+            [ -f trivy-fs.json ] && python3 scripts/trivy_report.py summary trivy-fs.json "Source, secrets and IaC"
+            echo
+            [ -f trivy-image.json ] && python3 scripts/trivy_report.py summary trivy-image.json "Container image"
+            echo
+            echo "Gate: any fixable HIGH or CRITICAL finding fails this stage."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Gate
+        run: |
+          total=$(( $(python3 scripts/trivy_report.py count trivy-fs.json) + $(python3 scripts/trivy_report.py count trivy-image.json) ))
+          if [ "$total" -gt 0 ]; then
+            echo "::error::Trivy found $total HIGH or CRITICAL finding(s)"
+            exit 1
+          fi

@@ -1,0 +1,50 @@
+name: falco
+on:
+  workflow_call:
+    inputs:
+      runner_labels:
+        type: string
+        default: '["self-hosted","linux","x64","k8s"]'
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  falco:
+    name: Falco runtime security
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: install
+        name: Install or upgrade Falco with the custom rules
+        run: |
+          helm repo add falcosecurity https://falcosecurity.github.io/charts
+          helm repo update
+          helm upgrade --install falco falcosecurity/falco -n falco --create-namespace \
+            --set driver.kind=modern_ebpf --set tty=true \
+            --set-file "customRules.pipeline-pulse\.yaml=falco/custom-rules.yaml"
+          kubectl -n falco rollout status ds/falco --timeout=180s
+      - id: selftest
+        name: Self-test (start a shell in the app namespace, expect an alert)
+        continue-on-error: true   # a blocked test pod should not fail the release
+        run: |
+          kubectl -n pipeline-pulse run falco-selftest --image=busybox:1.37 --restart=Never --rm -i \
+            --command -- sh -c 'echo falco-selftest'
+          sleep 10
+          logs=$(kubectl -n falco logs -l app.kubernetes.io/name=falco -c falco --since=3m --tail=-1)
+          grep -q "Shell in Pipeline Pulse container" <<< "$logs"
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 🦅 Falco"
+            echo "| Check | Result |"
+            echo "|---|---|"
+            bash scripts/step-row.sh "Helm install or upgrade" "${{ steps.install.outcome }}"
+            bash scripts/step-row.sh "Alert fired for the self-test shell" "${{ steps.selftest.outcome }}"
+            echo
+            echo '```'
+            kubectl -n falco get pods -o wide 2>&1 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

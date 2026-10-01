@@ -1,0 +1,23 @@
+:root{--mist:#dfe9e4;--ink:#14272b;--cobalt:#2f4bff;--signal:#ffb703;--paper:#f6faf8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--mist);color:var(--ink);font:400 1.1rem/1.6 "Bricolage Grotesque",system-ui,sans-serif}
+main{max-width:64rem;margin:0 auto;padding:4rem 1.5rem;display:grid;gap:3rem 4rem;grid-template-columns:1fr 1fr}
+header{grid-column:1/-1}
+h1{font-size:clamp(3.5rem,11vw,8rem);line-height:.92;margin:0 0 1.5rem;font-weight:800;letter-spacing:-.04em}
+header p{max-width:34ch;margin:0}
+.rail{list-style:none;margin:0;padding:0 0 0 1.5rem;border-left:3px solid var(--ink);display:grid;gap:.25rem}
+.rail li{position:relative;animation:lit .4s both;animation-delay:calc(var(--i,0)*90ms)}
+.rail li::before{content:"";position:absolute;left:-2.05rem;top:.85rem;width:.75rem;height:.75rem;border-radius:50%;background:var(--ink)}
+.rail li:nth-child(1){--i:1}.rail li:nth-child(2){--i:2}.rail li:nth-child(3){--i:3}.rail li:nth-child(4){--i:4}
+.rail li:nth-child(5){--i:5}.rail li:nth-child(6){--i:6}.rail li:nth-child(7){--i:7}.rail li:nth-child(8){--i:8}
+@keyframes lit{from{opacity:0;transform:translateX(-.5rem)}}
+.rail li:has(button:focus)::before{background:var(--cobalt);box-shadow:0 0 0 5px var(--signal)}
+button{all:unset;cursor:pointer;padding:.4rem .6rem;border-radius:.4rem;font-weight:800;font-size:1.2rem}
+button:hover{background:var(--paper)}
+button:focus-visible{outline:3px solid var(--cobalt);outline-offset:2px}
+#detail{background:var(--paper);border-radius:1.25rem;padding:2rem;align-self:start;min-height:15rem}
+#detail h2{margin:0;font-size:2.2rem;letter-spacing:-.03em}
+.tool{margin:.25rem 0 1rem;color:var(--cobalt);font-weight:800}
+.gate{border-top:2px solid var(--signal);padding-top:1rem;margin-bottom:0}
+@media (max-width:48rem){main{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.rail li{animation:none}}

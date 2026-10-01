@@ -1,0 +1,41 @@
+name: build
+on: workflow_call
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  build:
+    name: Build container image (tar, not pushed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: pipeline-pulse:ci
+          outputs: type=docker,dest=/tmp/image.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image
+          path: /tmp/image.tar
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 🏗️ Build"
+            if [ -f /tmp/image.tar ]; then
+              echo "| Item | Value |"
+              echo "|---|---|"
+              echo "| Image | \`pipeline-pulse:ci\` |"
+              echo "| Archive size | $(du -h /tmp/image.tar | cut -f1) |"
+              echo "| Archive sha256 | \`$(sha256sum /tmp/image.tar | cut -d' ' -f1)\` |"
+              echo "| Base | distroless static, nonroot |"
+            else
+              echo "❌ The image was not built."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

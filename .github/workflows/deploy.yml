@@ -1,0 +1,51 @@
+name: deploy
+on:
+  workflow_call:
+    inputs:
+      image_ref:
+        type: string
+        required: true
+      runner_labels:
+        type: string
+        default: '["self-hosted","linux","x64","k8s"]'
+      namespace:
+        type: string
+        default: pipeline-pulse
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}   # self-hosted runner with kubectl and cluster access
+    environment: production                          # add required reviewers for a manual approval gate
+    env:
+      IMAGE_REF: ${{ inputs.image_ref }}
+      NS: ${{ inputs.namespace }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: apply
+        name: Apply manifest with the verified digest
+        run: |
+          sed "s|IMAGE_PLACEHOLDER|$IMAGE_REF|" k8s/deployment.yaml | kubectl apply -f -
+          kubectl -n "$NS" rollout status deploy/pipeline-pulse --timeout=120s
+      - name: Roll back on failure
+        if: failure() && steps.apply.outcome == 'failure'
+        run: kubectl -n "$NS" rollout undo deploy/pipeline-pulse || true
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 🚀 Deploy"
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Rollout | ${{ steps.apply.outcome }} |"
+            echo "| Namespace | \`$NS\` |"
+            echo "| Image | \`$IMAGE_REF\` |"
+            echo
+            echo '```'
+            kubectl -n "$NS" get deploy,pods,svc -o wide 2>&1 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
+  <title>Pipeline Pulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Ship it.<br>Safely.</h1>
+      <p>Every commit passes eight checkpoints before it reaches a cluster. Pick one to see what it does.</p>
+    </header>
+    <nav aria-label="Pipeline stages">
+      <ol class="rail">
+        <li><button hx-get="/stages/lint" hx-target="#detail">Lint</button></li>
+        <li><button hx-get="/stages/test" hx-target="#detail">Test</button></li>
+        <li><button hx-get="/stages/sonar" hx-target="#detail">Code quality</button></li>
+        <li><button hx-get="/stages/build" hx-target="#detail">Build</button></li>
+        <li><button hx-get="/stages/trivy" hx-target="#detail">Vulnerability scan</button></li>
+        <li><button hx-get="/stages/rhacs" hx-target="#detail">Policy check</button></li>
+        <li><button hx-get="/stages/deploy" hx-target="#detail">Deploy</button></li>
+        <li><button hx-get="/stages/falco" hx-target="#detail">Runtime</button></li>
+      </ol>
+    </nav>
+    <section id="detail" aria-live="polite" hx-get="/stages/lint" hx-trigger="load"></section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,46 @@
+name: sonarqube
+on:
+  workflow_call:
+    secrets:
+      SONAR_TOKEN:
+        required: true
+      SONAR_HOST_URL:
+        required: true
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  sonarqube:
+    name: SonarQube analysis and quality gate
+    runs-on: ubuntu-latest   # switch to a self-hosted runner if SonarQube is only reachable internally
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # full history gives Sonar accurate blame and new-code detection
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage
+      - id: scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - id: gate
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 🔎 SonarQube"
+            echo "| Check | Result |"
+            echo "|---|---|"
+            bash scripts/step-row.sh "Analysis (project key: pipeline-pulse)" "${{ steps.scan.outcome }}"
+            bash scripts/step-row.sh "Quality gate" "${{ steps.gate.outcome }}"
+            echo
+            echo "Open the project in your SonarQube dashboard for issues, hotspots and coverage."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,37 @@
+name: lint
+on: workflow_call
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  lint:
+    name: Lint (Go, Dockerfile, shell)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - id: golangci
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+      - id: hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+      - id: shellcheck
+        run: shellcheck scripts/*.sh
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 🧹 Lint"
+            echo "| Check | Result |"
+            echo "|---|---|"
+            bash scripts/step-row.sh "golangci-lint (govet, staticcheck, gosec, revive)" "${{ steps.golangci.outcome }}"
+            bash scripts/step-row.sh "hadolint (Dockerfile)" "${{ steps.hadolint.outcome }}"
+            bash scripts/step-row.sh "shellcheck (scripts)" "${{ steps.shellcheck.outcome }}"
+          } >> "$GITHUB_STEP_SUMMARY"

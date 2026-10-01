@@ -1,0 +1,13 @@
+- rule: Shell in Pipeline Pulse container
+  desc: A shell started inside the site container, which should never need one
+  condition: spawned_process and container and k8s.ns.name = "pipeline-pulse" and proc.name in (sh, bash, ash)
+  output: Shell in site container (user=%user.name pod=%k8s.pod.name cmd=%proc.cmdline image=%container.image.repository)
+  priority: WARNING
+  tags: [container, shell]
+
+- rule: Unexpected outbound connection from Pipeline Pulse
+  desc: The static site only answers requests and should not open outbound connections
+  condition: outbound and container and k8s.ns.name = "pipeline-pulse"
+  output: Outbound connection (pod=%k8s.pod.name connection=%fd.name image=%container.image.repository)
+  priority: NOTICE
+  tags: [container, network]

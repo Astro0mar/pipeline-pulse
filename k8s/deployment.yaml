@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pipeline-pulse
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pipeline-pulse
+  namespace: pipeline-pulse
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: pipeline-pulse}
+  template:
+    metadata:
+      labels: {app: pipeline-pulse}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: site
+          image: IMAGE_PLACEHOLDER
+          ports: [{containerPort: 8080}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 64Mi}
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}}
+          livenessProbe: {httpGet: {path: /healthz, port: 8080}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pipeline-pulse
+  namespace: pipeline-pulse
+spec:
+  selector: {app: pipeline-pulse}
+  ports: [{port: 80, targetPort: 8080}]

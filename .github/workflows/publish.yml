@@ -1,0 +1,52 @@
+name: publish
+on:
+  workflow_call:
+    outputs:
+      image_ref:
+        description: Immutable image reference (repository@digest)
+        value: ${{ jobs.publish.outputs.image_ref }}
+permissions:
+  contents: read
+  packages: write
+defaults:
+  run:
+    shell: bash
+jobs:
+  publish:
+    name: Push image to GHCR
+    runs-on: ubuntu-latest
+    outputs:
+      image_ref: ${{ steps.push.outputs.image_ref }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: image
+          path: /tmp
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: push
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker load -i /tmp/image.tar
+          docker tag pipeline-pulse:ci "$IMAGE:${GITHUB_SHA}"
+          docker push "$IMAGE:${GITHUB_SHA}" | tee push.log
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            docker tag pipeline-pulse:ci "$IMAGE:${GITHUB_REF_NAME}"
+            docker push "$IMAGE:${GITHUB_REF_NAME}"
+          fi
+          DIGEST=$(grep -oE 'sha256:[0-9a-f]{64}' push.log | tail -n 1)
+          echo "image_ref=$IMAGE@$DIGEST" >> "$GITHUB_OUTPUT"
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## 📦 Publish"
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Registry | ghcr.io |"
+            echo "| Tag | \`${GITHUB_SHA::7}\` |"
+            echo "| Immutable reference | \`${{ steps.push.outputs.image_ref }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
